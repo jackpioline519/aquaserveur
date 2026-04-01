@@ -1,0 +1,4 @@
+{
+  "type": "replace_config",
+  "payload": "{\"system\":{\"name\":\"AquariumSecondaire\",\"configVersion\":\"1.2\"},\"sensors\":[],\"outputs\":[],\"manualTests\":[],\"analysisRules\":[],\"advice\":[],\"routines\":[],\"ihm\":{\"protocol\":\"websocket\",\"port\":8080,\"publishIntervalMs\":1000},\"logging\":{\"level\":\"info\",\"maxEntries\":500}}"
+}

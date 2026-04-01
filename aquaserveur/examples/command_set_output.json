@@ -1,0 +1,5 @@
+{
+  "type": "set_output",
+  "targetId": "relay_light",
+  "boolValue": true
+}
