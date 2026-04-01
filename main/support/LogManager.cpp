@@ -1,5 +1,9 @@
 #include "LogManager.h"
-#include <Arduino.h>
+#include <cstdint>
+#include <string>
+#include <vector>
+#include <map>
+#include <optional>
 
 namespace Aqua {
 

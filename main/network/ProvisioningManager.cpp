@@ -1,5 +1,6 @@
 #include "network/ProvisioningManager.h"
 
+#include <cstdio>
 #include <cstring>
 #include <string>
 
@@ -15,8 +16,8 @@
 #include "esp_wifi.h"
 #include "nvs_flash.h"
 
-#include "wifi_provisioning/manager.h"
-#include "wifi_provisioning/scheme_ble.h"
+#include "network_provisioning/manager.h"
+#include "network_provisioning/scheme_ble.h"
 
 namespace {
     constexpr const char* TAG = "ProvisioningManager";
@@ -44,9 +45,11 @@ namespace Aqua {
             return err;
         }
 
-        g_eventGroup = xEventGroupCreate();
         if (g_eventGroup == nullptr) {
-            return ESP_ERR_NO_MEM;
+            g_eventGroup = xEventGroupCreate();
+            if (g_eventGroup == nullptr) {
+                return ESP_ERR_NO_MEM;
+            }
         }
 
         esp_netif_create_default_wifi_sta();
@@ -54,12 +57,22 @@ namespace Aqua {
         wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
         ESP_ERROR_CHECK(esp_wifi_init(&cfg));
 
-        // Important : stockage des paramètres Wi-Fi en flash/NVS
         ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_FLASH));
 
-        ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &ProvisioningManager::EventHandler, nullptr));
-        ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &ProvisioningManager::EventHandler, nullptr));
-        ESP_ERROR_CHECK(esp_event_handler_register(WIFI_PROV_EVENT, ESP_EVENT_ANY_ID, &ProvisioningManager::EventHandler, nullptr));
+        ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT,
+            ESP_EVENT_ANY_ID,
+            &ProvisioningManager::EventHandler,
+            nullptr));
+
+        ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT,
+            IP_EVENT_STA_GOT_IP,
+            &ProvisioningManager::EventHandler,
+            nullptr));
+
+        ESP_ERROR_CHECK(esp_event_handler_register(NETWORK_PROV_EVENT,
+            ESP_EVENT_ANY_ID,
+            &ProvisioningManager::EventHandler,
+            nullptr));
 
         return ESP_OK;
     }
@@ -74,43 +87,45 @@ namespace Aqua {
                 esp_wifi_connect();
             }
             else if (event_id == WIFI_EVENT_STA_DISCONNECTED) {
-                ESP_LOGW(TAG, "Wi-Fi déconnecté, nouvelle tentative...");
+                ESP_LOGW(TAG, "Wi-Fi deconnecte, nouvelle tentative...");
                 esp_wifi_connect();
             }
         }
         else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
-            ESP_LOGI(TAG, "Wi-Fi connecté, IP obtenue");
+            ESP_LOGI(TAG, "Wi-Fi connecte, IP obtenue");
             xEventGroupSetBits(g_eventGroup, WIFI_CONNECTED_BIT);
         }
-        else if (event_base == WIFI_PROV_EVENT) {
+        else if (event_base == NETWORK_PROV_EVENT) {
             switch (event_id) {
-            case WIFI_PROV_START:
-                ESP_LOGI(TAG, "Provisioning BLE démarré");
+            case NETWORK_PROV_START:
+                ESP_LOGI(TAG, "Provisioning BLE demarre");
                 break;
 
-            case WIFI_PROV_CRED_RECV:
-                ESP_LOGI(TAG, "Identifiants Wi-Fi reçus");
+            case NETWORK_PROV_WIFI_CRED_RECV:
+                ESP_LOGI(TAG, "Identifiants Wi-Fi recus");
                 break;
 
-            case WIFI_PROV_CRED_SUCCESS:
-                ESP_LOGI(TAG, "Provisioning Wi-Fi réussi");
+            case NETWORK_PROV_WIFI_CRED_SUCCESS:
+                ESP_LOGI(TAG, "Provisioning Wi-Fi reussi");
                 xEventGroupSetBits(g_eventGroup, PROV_SUCCESS_BIT);
                 break;
 
-            case WIFI_PROV_CRED_FAIL:
-                ESP_LOGE(TAG, "Provisioning Wi-Fi échoué");
+            case NETWORK_PROV_WIFI_CRED_FAIL:
+                ESP_LOGE(TAG, "Provisioning Wi-Fi echoue");
                 xEventGroupSetBits(g_eventGroup, PROV_FAILED_BIT);
                 break;
 
-            case WIFI_PROV_END:
-                ESP_LOGI(TAG, "Provisioning terminé");
-                wifi_prov_mgr_deinit();
+            case NETWORK_PROV_END:
+                ESP_LOGI(TAG, "Provisioning termine");
+                network_prov_mgr_deinit();
                 break;
 
             default:
                 break;
             }
         }
+
+        (void)event_data;
     }
 
     std::string ProvisioningManager::BuildDefaultServiceName() const
@@ -129,64 +144,73 @@ namespace Aqua {
     }
 
     esp_err_t ProvisioningManager::DeviceNameEndpointHandler(uint32_t,
-        const uint8_t* inbuf, ssize_t inlen,
-        uint8_t** outbuf, ssize_t* outlen,
+        const uint8_t* inbuf,
+        ssize_t inlen,
+        uint8_t** outbuf,
+        ssize_t* outlen,
         void*)
     {
         if (inbuf == nullptr || inlen <= 0 || outbuf == nullptr || outlen == nullptr) {
             return ESP_ERR_INVALID_ARG;
         }
 
-        std::string receivedName(reinterpret_cast<const char*>(inbuf), static_cast<size_t>(inlen));
+        std::string receivedName(reinterpret_cast<const char*>(inbuf),
+            static_cast<size_t>(inlen));
 
-        // Nettoyage simple
         while (!receivedName.empty() &&
-            (receivedName.back() == '\0' || receivedName.back() == '\n' || receivedName.back() == '\r' || receivedName.back() == ' ')) {
+            (receivedName.back() == '\0' ||
+                receivedName.back() == '\n' ||
+                receivedName.back() == '\r' ||
+                receivedName.back() == ' ')) {
             receivedName.pop_back();
         }
 
+        const char* msg = nullptr;
+
         if (receivedName.empty()) {
-            const char* msg = "device_name_empty";
-            *outlen = std::strlen(msg);
-            *outbuf = static_cast<uint8_t*>(malloc(*outlen));
-            if (*outbuf) {
-                std::memcpy(*outbuf, msg, *outlen);
-            }
-            return ESP_OK;
+            msg = "device_name_empty";
+        }
+        else {
+            esp_err_t err = g_settingsStore.SaveDeviceName(receivedName);
+            msg = (err == ESP_OK) ? "ok" : "save_failed";
         }
 
-        esp_err_t err = g_settingsStore.SaveDeviceName(receivedName);
-
-        const char* msg = (err == ESP_OK) ? "ok" : "save_failed";
         *outlen = std::strlen(msg);
         *outbuf = static_cast<uint8_t*>(malloc(*outlen));
-        if (*outbuf) {
-            std::memcpy(*outbuf, msg, *outlen);
+        if (*outbuf == nullptr) {
+            *outlen = 0;
+            return ESP_ERR_NO_MEM;
         }
 
+        std::memcpy(*outbuf, msg, *outlen);
         return ESP_OK;
     }
 
     esp_err_t ProvisioningManager::StartProvisioningService()
     {
-        wifi_prov_mgr_config_t config = {};
-        config.scheme = wifi_prov_scheme_ble;
-        config.scheme_event_handler.event_cb = wifi_prov_scheme_ble_event_cb_free_btdm;
-        config.scheme_event_handler.user_data = nullptr;
+        network_prov_mgr_config_t config = {};
+        config.scheme = network_prov_scheme_ble;
+        config.scheme_event_handler = NETWORK_PROV_SCHEME_BLE_EVENT_HANDLER_FREE_BTDM;
 
-        ESP_ERROR_CHECK(wifi_prov_mgr_init(config));
+        ESP_ERROR_CHECK(network_prov_mgr_init(config));
 
-        // Endpoint custom pour le nom du système
-        ESP_ERROR_CHECK(wifi_prov_mgr_endpoint_create("device-name"));
+        ESP_ERROR_CHECK(network_prov_mgr_endpoint_create("device-name"));
 
         std::string serviceName = BuildDefaultServiceName();
 
-        // Sécurité 1 = session chiffrée + PoP
-        wifi_prov_security_t security = WIFI_PROV_SECURITY_1;
+        network_prov_security_t security = NETWORK_PROV_SECURITY_1;
         const char* pop = "Aqua1234";
 
-        ESP_ERROR_CHECK(wifi_prov_mgr_start_provisioning(security, pop, serviceName.c_str(), nullptr));
-        ESP_ERROR_CHECK(wifi_prov_mgr_endpoint_register("device-name", DeviceNameEndpointHandler, nullptr));
+        ESP_ERROR_CHECK(network_prov_mgr_start_wifi_provisioning(
+            security,
+            pop,
+            serviceName.c_str(),
+            nullptr));
+
+        ESP_ERROR_CHECK(network_prov_mgr_endpoint_register(
+            "device-name",
+            &ProvisioningManager::DeviceNameEndpointHandler,
+            nullptr));
 
         ESP_LOGI(TAG, "BLE provisioning actif. Service: %s", serviceName.c_str());
         ESP_LOGI(TAG, "PoP: %s", pop);
@@ -217,10 +241,10 @@ namespace Aqua {
     esp_err_t ProvisioningManager::EnsureProvisionedAndConnected(std::string& deviceName)
     {
         bool provisioned = false;
-        ESP_ERROR_CHECK(wifi_prov_mgr_is_provisioned(&provisioned));
+        ESP_ERROR_CHECK(network_prov_mgr_is_wifi_provisioned(&provisioned));
 
         if (!provisioned) {
-            ESP_LOGI(TAG, "Aucun Wi-Fi sauvegardé, lancement du provisioning BLE");
+            ESP_LOGI(TAG, "Aucun Wi-Fi sauvegarde, lancement du provisioning BLE");
 
             std::string defaultName;
             if (g_settingsStore.LoadDeviceName(defaultName) != ESP_OK) {
@@ -243,7 +267,7 @@ namespace Aqua {
             }
         }
         else {
-            ESP_LOGI(TAG, "Wi-Fi déjà provisionné, connexion avec les identifiants enregistrés");
+            ESP_LOGI(TAG, "Wi-Fi deja provisionne, connexion avec les identifiants enregistres");
             ESP_ERROR_CHECK(ConnectWifiWithSavedCredentials());
         }
 

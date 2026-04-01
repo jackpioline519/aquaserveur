@@ -1,0 +1,37 @@
+﻿idf_component_register(
+    SRCS
+        "aquaserveur.cpp"
+        "network/ProvisioningManager.cpp"
+        "storage/SettingsStore.cpp"
+        "storage/SdCardManager.cpp"
+        "core/BootManager.cpp"
+        "core/StateManager.cpp"
+        "core/SystemContext.cpp"
+        "config/ConfigLoader.cpp"
+        "config/ConfigValidator.cpp"
+        "config/ConfigManager.cpp"
+        "comm/CommManager.cpp"
+        "comm/CommandManager.cpp"
+        "sensors/SensorManager.cpp"
+        "outputs/OutputManager.cpp"
+        "analysis/AnalysisEngine.cpp"
+        "analysis/AdviceEngine.cpp"
+        "analysis/RoutineManager.cpp"
+        "analysis/ManualTestManager.cpp"
+        "support/LogManager.cpp"
+        "support/TimeService.cpp"
+    INCLUDE_DIRS
+        "."
+    REQUIRES
+        nvs_flash
+        esp_wifi
+        esp_event
+        esp_netif
+        network_provisioning
+        protocomm
+        bt
+        fatfs
+        sdmmc
+        driver
+        
+)

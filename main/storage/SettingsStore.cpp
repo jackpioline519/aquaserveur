@@ -1,7 +1,6 @@
 #include "storage/SettingsStore.h"
-
 #include "nvs.h"
-#include "nvs_flash.h"
+#include <vector>
 
 namespace Aqua {
 
@@ -37,19 +36,15 @@ namespace Aqua {
             return err;
         }
 
-        std::string temp(requiredSize, '\0');
-        err = nvs_get_str(handle, temp.data(), &requiredSize);
+        std::vector<char> buffer(requiredSize);
+        err = nvs_get_str(handle, kKeyDeviceName, buffer.data(), &requiredSize);
         nvs_close(handle);
 
         if (err != ESP_OK) {
             return err;
         }
 
-        if (!temp.empty() && temp.back() == '\0') {
-            temp.pop_back();
-        }
-
-        name = temp;
+        name = std::string(buffer.data());
         return ESP_OK;
     }
 

@@ -1,0 +1,122 @@
+{
+  "system": {
+    "name": "AquariumPrincipal",
+    "configVersion": "1.1"
+  },
+  "sensors": [
+    {
+      "id": "temp_water_1",
+      "type": "temperature",
+      "protocol": "onewire",
+      "pin": 4,
+      "unit": "C",
+      "role": "water_temperature",
+      "readIntervalMs": 5000,
+      "enabled": true
+    },
+    {
+      "id": "ph_1",
+      "type": "ph",
+      "protocol": "analog",
+      "pin": 34,
+      "unit": "pH",
+      "role": "water_ph",
+      "readIntervalMs": 10000,
+      "enabled": true
+    }
+  ],
+  "outputs": [
+    {
+      "id": "relay_light",
+      "pin": 18,
+      "role": "lighting",
+      "label": "Lampe principale",
+      "defaultState": "off",
+      "manualControlAllowed": true,
+      "enabled": true
+    },
+    {
+      "id": "relay_o2",
+      "pin": 19,
+      "role": "oxygenation",
+      "label": "Oxygénation",
+      "defaultState": "off",
+      "manualControlAllowed": true,
+      "enabled": true
+    }
+  ],
+  "manualTests": [
+    {
+      "id": "no3",
+      "label": "Nitrate",
+      "unit": "mg/L",
+      "role": "nitrate",
+      "minValue": 0,
+      "maxValue": 100,
+      "validityMs": 86400000
+    },
+    {
+      "id": "no2",
+      "label": "Nitrite",
+      "unit": "mg/L",
+      "role": "nitrite",
+      "minValue": 0,
+      "maxValue": 10,
+      "validityMs": 86400000
+    }
+  ],
+  "analysisRules": [
+    {
+      "id": "rule_temp_high",
+      "variable": "water_temperature",
+      "condition": "greater_than",
+      "value": 27.0,
+      "severity": "warning",
+      "resultCode": "TEMP_HIGH",
+      "message": "Température de l'eau trop élevée",
+      "enabled": true
+    },
+    {
+      "id": "rule_no3_high",
+      "variable": "nitrate",
+      "condition": "greater_than",
+      "value": 25.0,
+      "severity": "warning",
+      "resultCode": "NO3_HIGH",
+      "message": "Nitrates élevés",
+      "enabled": true
+    }
+  ],
+  "advice": [
+    {
+      "resultCode": "TEMP_HIGH",
+      "preventive": "Vérifier régulièrement la stabilité thermique du bac.",
+      "corrective": "Réduire l'éclairage et contrôler le chauffage."
+    },
+    {
+      "resultCode": "NO3_HIGH",
+      "preventive": "Limiter la suralimentation.",
+      "corrective": "Faire un changement d'eau et contrôler la filtration."
+    }
+  ],
+  "routines": [
+    {
+      "id": "light_day_cycle",
+      "outputId": "relay_light",
+      "start": "09:00",
+      "end": "20:00",
+      "days": ["mon", "tue", "wed", "thu", "fri", "sat", "sun"],
+      "priority": 1,
+      "enabled": true
+    }
+  ],
+  "ihm": {
+    "protocol": "websocket",
+    "port": 8080,
+    "publishIntervalMs": 1000
+  },
+  "logging": {
+    "level": "debug",
+    "maxEntries": 1000
+  }
+}

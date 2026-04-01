@@ -1,0 +1,5 @@
+{
+  "type": "add_manual_test",
+  "targetId": "no3",
+  "numericValue": 32.5
+}
